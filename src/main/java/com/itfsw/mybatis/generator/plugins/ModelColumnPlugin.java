@@ -19,6 +19,8 @@ package com.itfsw.mybatis.generator.plugins;
 import com.itfsw.mybatis.generator.plugins.utils.BasePlugin;
 import com.itfsw.mybatis.generator.plugins.utils.FormatTools;
 import com.itfsw.mybatis.generator.plugins.utils.JavaElementGeneratorTools;
+import com.itfsw.mybatis.generator.plugins.utils.PluginTools;
+import com.itfsw.mybatis.generator.plugins.utils.hook.IModelColumnPluginHook;
 import org.mybatis.generator.api.IntrospectedColumn;
 import org.mybatis.generator.api.IntrospectedTable;
 import org.mybatis.generator.api.dom.java.*;
@@ -34,9 +36,18 @@ import org.mybatis.generator.internal.util.StringUtility;
  * ---------------------------------------------------------------------------
  */
 public class ModelColumnPlugin extends BasePlugin {
-    public static final String ENUM_NAME = "Column";  // 内部Enum名
-    public static final String METHOD_EXCLUDES = "excludes";   // 方法名
-    public static final String METHOD_GET_ESCAPED_COLUMN_NAME = "getEscapedColumnName";    // 方法名
+    /**
+     * 内部Enum名
+     */
+    public static final String ENUM_NAME = "Column";
+
+    /**
+     * 自定义方法
+     */
+    public static final String METHOD_EXCLUDES = "excludes";
+    public static final String METHOD_ALL = "all";
+    public static final String METHOD_GET_ESCAPED_COLUMN_NAME = "getEscapedColumnName";
+    public static final String METHOD_GET_ALIASED_ESCAPED_COLUMN_NAME = "getAliasedEscapedColumnName";
 
     public static final String CONST_BEGINNING_DELIMITER = "BEGINNING_DELIMITER";   // const
     public static final String CONST_ENDING_DELIMITER = "ENDING_DELIMITER";   // const
@@ -235,6 +246,18 @@ public class ModelColumnPlugin extends BasePlugin {
         FormatTools.addMethodWithBestPosition(innerEnum, mExcludes);
         logger.debug("itfsw(数据Model属性对应Column获取插件):" + topLevelClass.getType().getShortName() + ".Column增加excludes方法。");
 
+        // all
+        Method mAll = JavaElementGeneratorTools.generateMethod(
+                METHOD_ALL,
+                JavaVisibility.PUBLIC,
+                new FullyQualifiedJavaType(ENUM_NAME + "[]")
+        );
+        commentGenerator.addGeneralMethodComment(mAll, introspectedTable);
+        mAll.setStatic(true);
+        mAll.addBodyLine("return Column.values();");
+        FormatTools.addMethodWithBestPosition(innerEnum, mAll);
+        logger.debug("itfsw(数据Model属性对应Column获取插件):" + topLevelClass.getType().getShortName() + ".Column增加all方法。");
+
         // getEscapedColumnName
         Method mGetEscapedColumnName = JavaElementGeneratorTools.generateMethod(
                 METHOD_GET_ESCAPED_COLUMN_NAME,
@@ -252,6 +275,37 @@ public class ModelColumnPlugin extends BasePlugin {
         );
         FormatTools.addMethodWithBestPosition(innerEnum, mGetEscapedColumnName);
         logger.debug("itfsw(数据Model属性对应Column获取插件):" + topLevelClass.getType().getShortName() + ".Column增加getEscapedColumnName方法。");
+
+        // getAliasedEscapedColumnName
+        Method mGetAliasedEscapedColumnName = JavaElementGeneratorTools.generateMethod(
+                METHOD_GET_ALIASED_ESCAPED_COLUMN_NAME,
+                JavaVisibility.PUBLIC,
+                FullyQualifiedJavaType.getStringInstance()
+        );
+        commentGenerator.addGeneralMethodComment(mGetAliasedEscapedColumnName, introspectedTable);
+        if (StringUtility.stringHasValue(introspectedTable.getTableConfiguration().getAlias())) {
+            String alias = introspectedTable.getTableConfiguration().getAlias();
+            mGetAliasedEscapedColumnName.addBodyLine("StringBuilder sb = new StringBuilder();");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(\"" + alias + ".\");");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(this." + METHOD_GET_ESCAPED_COLUMN_NAME + "());");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(\" as \");");
+            mGetAliasedEscapedColumnName.addBodyLine("if (this.isColumnNameDelimited) {");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(" + CONST_BEGINNING_DELIMITER + ");");
+            mGetAliasedEscapedColumnName.addBodyLine("}");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(\"" + alias + "_\");");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(this.column);");
+            mGetAliasedEscapedColumnName.addBodyLine("if (this.isColumnNameDelimited) {");
+            mGetAliasedEscapedColumnName.addBodyLine("sb.append(" + CONST_BEGINNING_DELIMITER + ");");
+            mGetAliasedEscapedColumnName.addBodyLine("}");
+            mGetAliasedEscapedColumnName.addBodyLine("return sb.toString();");
+        } else {
+            mGetAliasedEscapedColumnName.addBodyLine("return this." + METHOD_GET_ESCAPED_COLUMN_NAME + "();");
+        }
+        FormatTools.addMethodWithBestPosition(innerEnum, mGetAliasedEscapedColumnName);
+        logger.debug("itfsw(数据Model属性对应Column获取插件):" + topLevelClass.getType().getShortName() + ".Column增加getAliasedEscapedColumnName方法。");
+
+        // hook
+        PluginTools.getHook(IModelColumnPluginHook.class).modelColumnEnumGenerated(innerEnum, topLevelClass, introspectedTable);
 
         return innerEnum;
     }
